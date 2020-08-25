@@ -2,7 +2,7 @@
 """
 Created on Thu Aug  6 17:27:54 2020
 
-@author: Brian Minnick
+@author: Brian M
 """
 #master parameters
 #part 1
@@ -567,7 +567,7 @@ outputFile.close()
 print("End Part 7")
 
 #=================================Part 8=======================================
-#define the window tools
+#define the window tools CURRENTLY NOT FUNCTIONAL
 
 def xPlus100():
     global xDrawOffset

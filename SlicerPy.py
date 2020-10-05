@@ -2,7 +2,7 @@
 """
 Created on Thu Aug  6 17:27:54 2020
 
-@author: Brian M
+@author: Brian Minnick
 """
 #master parameters
 #part 1
@@ -25,13 +25,13 @@ maximumSurfaceSpeed = 3 #the surface speed of the hotend in mm/s
 
 #part 5
 extruderXmmPerEmm = 21.55 #mm of X axis movement per mm of E axis movement on belt printer
-slotBufferLength = 2 #in mm. this value accounts for the arm not making contact at the very start of the slot
+slotBufferLength = 7 #in mm. this value accounts for the arm not making contact at the very start of the slot
 stripFeedRate = 1 #in mm/s. the rate at which the data strip is fed through the mechanism
 
 #part 6
 xDrawOffset = 10 #offset within Tkinter window to draw paths
-yDrawOffset = 600
-drawScale = 2 #scaling factor all points are multiplied by to display. Does not effect model
+yDrawOffset = 100
+drawScale = 5 #scaling factor all points are multiplied by to display. Does not effect model
 learningRate = 0.001
 drawRed = True
 drawGreen = True
@@ -44,7 +44,7 @@ drawBlack = True
 #=================================Part 1=======================================
 
 #First, the GCode file is opened and looped through to detect important lines
-rawGCodeFile = open("input.gcode", "r")
+rawGCodeFile = open("texttogcode_line.gcode", "r")
 absXPoints = [0] #the desired X Coordinate of the hotend 
 absYPoints = [0]
 absZPoints = [0]
@@ -109,7 +109,7 @@ ohmRatios = numpy.array([[0.001,11],#REQUIRES TUNING
                          [8,3],
                          [9,2],])
 
-#keys are the resulting voltage, values are the combination of activated chanels that result in that voltage
+#keys are the resulting voltage, values are the combination of activated channels that result in that voltage
 voltages = {'0': [0,0,0,0,0,0,0]}
 
 #single activation voltages
@@ -219,7 +219,7 @@ import bisect
 
 movementDurations = list()
 closestSpeeds = list(list())
-closestActivatedChanels = list(list())
+closestActivatedchannels = list(list())
 requestedSpeeds = list(list())
 
 for index in range(len(absXPoints)):
@@ -242,9 +242,17 @@ for index in range(len(absXPoints)):
         except:
             break
         try:
-            XReqSpeed = (deltaX/movementDuration)*0.999 #this multiple is needed or else the binary search can return a value not in the speed list
-            YReqSpeed = (deltaY/movementDuration)*0.999
-            ZReqSpeed = (deltaZ/movementDuration)*0.999
+            XReqSpeed = (deltaX/movementDuration)
+            YReqSpeed = (deltaY/movementDuration)
+            ZReqSpeed = (deltaZ/movementDuration)
+            
+            # Activate if using Binary Search as implemented below. This is not optimal.
+            # XReqSpeed = (deltaX/movementDuration)*0.999 #this multiple is needed or else the binary search can return a value not in the speed list
+            # YReqSpeed = (deltaY/movementDuration)*0.999
+            # ZReqSpeed = (deltaZ/movementDuration)*0.999
+            
+            surfaceSpeed = (pow(( pow(XReqSpeed,2) + pow(YReqSpeed,2) + pow(ZReqSpeed,2)),1/2))  
+            assert surfaceSpeed < 3.005 and surfaceSpeed > 2.995
             
             minimumDifference = 1000
             closestSpeedX = -1000
@@ -292,7 +300,7 @@ for index in range(len(absXPoints)):
                 
             requestedSpeeds.append([XReqSpeed, YReqSpeed, ZReqSpeed])
             closestSpeeds.append([closestSpeedX, closestSpeedY, closestSpeedZ])
-            closestActivatedChanels.append([speeds[closestSpeedX], speeds[closestSpeedY], speeds[closestSpeedZ]])
+            closestActivatedchannels.append([speeds[closestSpeedX], speeds[closestSpeedY], speeds[closestSpeedZ]])
         except:
             print("Extrusion only move detected at line %i, removing this line for now" % index)
             absXPoints.pop(index)
@@ -310,30 +318,15 @@ currentEPosition = 0
 fullDataStripSegment = []
 completeDataStrip = list(list())
 
-for index, chanelSet in enumerate(closestActivatedChanels):
+for index, channelSet in enumerate(closestActivatedchannels):
     fullDataStripSegment = []
-    for chanel in chanelSet[0]:
-        fullDataStripSegment.append(chanel)
-    for chanel in chanelSet[1]:
-        fullDataStripSegment.append(chanel)
-    for chanel in chanelSet[2]:
-        fullDataStripSegment.append(chanel)
-    for x in range(3):
-        if(requestedSpeeds[index][x] < 0):
-            fullDataStripSegment.append(1)
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(1)
-            fullDataStripSegment.append(0)
-        elif(requestedSpeeds[index][x] > 0):
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(1)
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(1)
-        elif(requestedSpeeds[index][x] == 0):
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(0)
-            fullDataStripSegment.append(0)
+    for channel in channelSet[0]:
+        fullDataStripSegment.append(channel)
+    for channel in channelSet[1]:
+        fullDataStripSegment.append(channel)
+    for channel in channelSet[2]:
+        fullDataStripSegment.append(channel)
+    
     if(extruderActive[index] < 0):
         fullDataStripSegment.append(1)
         fullDataStripSegment.append(0)
@@ -348,7 +341,25 @@ for index, chanelSet in enumerate(closestActivatedChanels):
         fullDataStripSegment.append(0)
         fullDataStripSegment.append(0)
         fullDataStripSegment.append(0)
-        fullDataStripSegment.append(0)
+        fullDataStripSegment.append(0)    
+        
+    for x in range(3):
+        if(requestedSpeeds[index][2-x] < 0):
+            fullDataStripSegment.append(1)
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(1)
+            fullDataStripSegment.append(0)
+        elif(requestedSpeeds[index][2-x] > 0):
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(1)
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(1)
+        elif(requestedSpeeds[index][2-x] == 0):
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(0)
+            fullDataStripSegment.append(0)
+    
     completeDataStrip.append(fullDataStripSegment)
 print("End Part 5")
 
@@ -504,17 +515,16 @@ outputFile = open("output.gcode", "a+") #TODO: update GCode header to match belt
 outputFile.seek(0)
 outputFile.truncate()
 outputFile.write(";GCode file generated by SlicerPy 2020 written by Brian Minnick\n")
-outputFile.write("T0\n")                      #select tool 0
-outputFile.write("M104 S200\n")               #set temp
-outputFile.write("M109 S200\n")               #wait for temp
+outputFile.write("M104 S190\n")               #set temp
+outputFile.write("M109 S190\n")               #wait for temp
 outputFile.write("M82\n")                     #absolute mode
-outputFile.write("G28\n")                     #home
-outputFile.write("M375 P\"heightmap.csv\"\n") #load heightmap
+outputFile.write("M201 X100 Y100\n")          #set maximum axial acceleration
+outputFile.write("G28 X Z\n")                 #home
 outputFile.write("G92 E0\n")                  #set extruder position to 0
 outputFile.write("G1 F3600 E-6.5\n")          #retract filament
-outputFile.write("G0 F1714.3 X10 Y10 Z0.3\n") #move to starting location
-outputFile.write("M204 S1100\n")              #set maximum acceleration
-outputFile.write("G1 F3600 E0\n")             #undo retract filament
+outputFile.write("G0 F750 X10 Y10 Z0.3\n")    #move to starting location
+outputFile.write("M204 S100\n")               #set maximum acceleration
+outputFile.write("G1 F2400 E0\n")             #undo retract filament
 
 for index, row in enumerate(completeDataStrip):
     extrudeAmountX = 185.5/extruderXmmPerEmm
@@ -523,51 +533,55 @@ for index, row in enumerate(completeDataStrip):
     totalSlotHeight = (slotBufferLength)+(stripFeedRate*movementDurations[index])
     extrudeAmountY = totalSlotHeight/extruderXmmPerEmm
     currentXPosition = 195.5
-    for chanelIndex, chanel in enumerate(reversed(row)):
-        if chanel == 0:
-            currentXPosition -=1.9
+    for channelIndex, channel in enumerate(reversed(row)):
+        if channel == 0:
+            currentXPosition -=1.75
             outputFile.write("G0 X%f\n" % (currentXPosition))
             currentYPosition += totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=0.4
+            currentXPosition -=0.5
             outputFile.write("G0 X%f\n" % (currentXPosition))
             currentYPosition -= totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=0.4
+            currentXPosition -=0.5
             outputFile.write("G0 X%f\n" % (currentXPosition))
             currentYPosition += totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=0.4
+            currentXPosition -=0.5
             outputFile.write("G0 X%f\n" % (currentXPosition))
             currentYPosition -= totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=1.9
-            outputFile.write("G0 X%f ;end of chanel value 0\n" % (currentXPosition))
-        if chanel == 1:
-            currentXPosition -=0.2
-            outputFile.write("G0 X%f ;end of chanel value 0\n" % (currentXPosition))
+            currentXPosition -=1.75
+            outputFile.write("G0 X%f ;end of channel value 0\n" % (currentXPosition))
+        if channel == 1:
+            currentXPosition -=0.3
+            outputFile.write("G0 X%f ;end of channel value 0\n" % (currentXPosition))
             currentYPosition += totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=4.6
+            currentXPosition -=4.4
             outputFile.write("G0 X%f\n" % (currentXPosition))
             currentYPosition -= totalSlotHeight
             currentEPosition += extrudeAmountY
             outputFile.write("G1 Y%f E%f\n" % (currentYPosition, currentEPosition))
-            currentXPosition -=0.2
-            outputFile.write("G0 X%f ;end of chanel value 0\n" % (currentXPosition))
+            currentXPosition -=0.3
+            outputFile.write("G0 X%f ;end of channel value 0\n" % (currentXPosition))
     currentYPosition += totalSlotHeight
     currentXPosition = 10
     outputFile.write("G0 Y%f X%f ;end of row\n" % (currentYPosition, currentXPosition))
+outputFile.write("G0 Z10\n")
+outputFile.write("G28 X\n")#home
+outputFile.write("M300 S1567 P499\nM300 S1318 P166\nM300 S1046 P666\nM300 S1318 P666\nM300 S1567 P666\nM300 S2093 P1332\nM300 S2637 P499\nM300 S2349 P166\nM300 S2093 P666\nM300 S1318 P666\nM300 S1479 P666\nM300 S1567 P1332\nM300 S1567 P333\nM300 S1567 P333\nM300 S2637 P999\nM300 S2349 P333\nM300 S2093 P666\nM300 S987 P1332\nM300 S880 P333\nM300 S987 P333\nM300 S2093 P666\nM300 S2093 P666\nM300 S1567 P666\nM300 S1318 P666\nM300 S1046 P666\nM300 S1567 P499\nM300 S1318 P166\nM300 S1046 P666\nM300 S1318 P666\nM300 S1567 P666\nM300 S2093 P1332\nM300 S2637 P499\nM300 S2349 P166\nM300 S2093 P666\nM300 S1318 P666\nM300 S1479 P666\nM300 S1567 P1332\nM300 S1567 P333\nM300 S1567 P333\nM300 S2637 P999\nM300 S2349 P333\nM300 S2093 P666\nM300 S987 P1332\nM300 S880 P333\nM300 S987 P333\nM300 S2093 P666\nM300 S2093 P666\nM300 S1567 P666\n") #play song
 outputFile.close()
+print("     Total Data Stip Length: %imm" % currentYPosition)
 print("End Part 7")
 
 #=================================Part 8=======================================
-#define the window tools CURRENTLY NOT FUNCTIONAL
+#define the window tools
 
 def xPlus100():
     global xDrawOffset

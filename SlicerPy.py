@@ -17,7 +17,7 @@ maximumSpeed = 1800 #maximum observed speed in RPM. This can include gear reduct
 minimumSpeed = None
 minimumVoltage = None #TODO: determine minimum opperational voltage
 useDebugSpeedList = False
-maximumItt = 100
+maximumItt = 100 #How many debug speeds to create
 
 #part 4
 motorRotationsPerMM = 10 #currently, the program assumes this value is the same for all axes.
@@ -92,102 +92,136 @@ import numpy
 from itertools import combinations
 from collections import OrderedDict
 
-inputVoltage = 25 #Vi
+inputVoltage = 25 #vi
+motorResistance = 7.5
+cutSwitchResistance = motorResistance*0.5 #The cut switch adds a resistor in parallel with the motor to cur the current in half, This is to even out the distribution of speeds
+potResistances = [10, 9, 8, 7, 6, 5]
 
 R1list = []
 R2list = []
 
-#             Z1            Z2 
+#      Controller         Motor 
 # +Vi -----|==|-----o-----|==|--- +0
-#                    |Vout
-
-ohmRatios = numpy.array([[0.001,11],#REQUIRES TUNING
-                         [0.5,10.5],
-                         [1,10], #fist value is the resistance of Z1
-                         [3,8], #second value is the resistance of Z2
-                         [7,4],
-                         [8,3],
-                         [9,2],])
+#                   |Vmot
 
 #keys are the resulting voltage, values are the combination of activated channels that result in that voltage
-voltages = {'0': [0,0,0,0,0,0,0]}
+voltages = {}
 
 #single activation voltages
-for positions in combinations(range(7), 1):
+for positions in combinations(range(6), 1):
         p = [0] * 7
-        R1list = []
-        R2list = []
+        Rlist = []
         for i in positions:
             p[i] = 1
-            R1list.append(ohmRatios[i,0])
-            R2list.append(ohmRatios[i,1])
-        R1 = (1/((1/R1list[0])))
-        R2 = (1/((1/R2list[0])))
-        voltage = (R2/(R1+R2))*inputVoltage
+            Rlist.append(potResistances[i])
+        R1 = (1/((1/Rlist[0]))) #the resistance of all activated channels are added using the parallel resistance equation
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+motorResistance)))
         voltages[voltage] = p
+        
+for positions in combinations(range(6), 1):
+        p = [0] * 7
+        Rlist = []
+        for i in positions:
+            p[i] = 1
+            Rlist.append(potResistances[i])
+        p[6] = 1
+        R1 = (1/((1/Rlist[0]))) #the resistance of all activated channels are added using the parallel resistance equation
+        R2 = (1/((1/motorResistance)+(1/cutSwitchResistance))) #the resistance of the motor and cutswitch in parallel is calculated
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+R2))) #the voltage drop across the first resistors is calculated.
+        voltages[voltage*(motorResistance/(motorResistance+cutSwitchResistance))] = p #Since the current is cut in half due to the cut switch in parallel, the "apparent" voltage to achieve the same current without the cut switch is half.
 
-#     R1 ___________  ___________ R2
-#        v          v v         v
-#              r1         r3     
-#        o----|==|---o---|==|----o
-# +Vi ---|     r2    |    r4     |--- +0v
-#        o----|==|---o---|==|----o
-#                    |Vout
+#Controller__________  
+#        v          v 
+#              r1       Motor     
+#        o----|==|---o---|==|---- +0v
+# +Vi ---|     r2    |
+#        o----|==|---o
+#                    |Vmot
 
 if enableDoubleActivations:
-    for positions in combinations(range(7), 2):
+    for positions in combinations(range(6), 2):
         p = [0] * 7
-        R1list = []
-        R2list = []
+        Rlist = []
         for i in positions:
             p[i] = 1
-            R1list.append(ohmRatios[i,0])
-            R2list.append(ohmRatios[i,1])
-        R1 = (1/((1/R1list[0])+(1/R1list[1])))
-        R2 = (1/((1/R2list[0])+(1/R2list[1])))
-        voltage = (R2/(R1+R2))*inputVoltage
+            Rlist.append(potResistances[i])
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1])))
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+motorResistance)))
         voltages[voltage] = p
+        
+    for positions in combinations(range(6), 2):
+        p = [0] * 7
+        Rlist = []
+        for i in positions:
+            p[i] = 1
+            Rlist.append(potResistances[i])
+        p[6] = 1
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1]))) #the resistance of all activated channels are added using the parallel resistance equation
+        R2 = (1/((1/motorResistance)+(1/cutSwitchResistance))) #the resistance of the motor and cutswitch in parallel is calculated
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+R2))) #the voltage drop across the first resistors is calculated.
+        voltages[voltage*(motorResistance/(motorResistance+cutSwitchResistance))] = p #Since the current is cut in half due to the cut switch in parallel, the "apparent" voltage to achieve the same current without the cut switch is half.
 
-#     R1 ___________  ___________ R2
-#        v          v v         v
-#              r1         r4     
-#        o----|==|---o---|==|----o
-# +Vi ---|     r2    |    r5     |--- +0v
-#        o----|==|---o---|==|----o
-#        |     r3    |    r6     |
-#        o----|==|---o---|==|----o
-#                    |Vout
+#Controller__________  
+#        v          v 
+#              r1       Motor     
+#        o----|==|---o---|==|---- +0v
+# +Vi ---|     r2    | 
+#        o----|==|---o
+#        |     r3    |
+#        o----|==|---o
+#                    |Vmot
 
 #triple activation voltages              
 if enableTripleActivations:
-    for positions in combinations(range(7), 3):
+    for positions in combinations(range(6), 3):
         p = [0] * 7
-        R1list = []
-        R2list = []
+        Rlist = []
         for i in positions:
             p[i] = 1
-            R1list.append(ohmRatios[i,0])
-            R2list.append(ohmRatios[i,1])
-        R1 = (1/((1/R1list[0])+(1/R1list[1])+(1/R1list[2])))
-        R2 = (1/((1/R2list[0])+(1/R2list[1])+(1/R2list[2])))
-        voltage = (R2/(R1+R2))*inputVoltage
+            Rlist.append(potResistances[i])
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1])+(1/Rlist[2])))
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+motorResistance)))
         voltages[voltage] = p
+        
+    for positions in combinations(range(6), 3):
+        p = [0] * 7
+        Rlist = []
+        for i in positions:
+            p[i] = 1
+            Rlist.append(potResistances[i])
+        p[6] = 1
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1])+(1/Rlist[2]))) #the resistance of all activated channels are added using the parallel resistance equation
+        R2 = (1/((1/motorResistance)+(1/cutSwitchResistance))) #the resistance of the motor and cutswitch in parallel is calculated
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+R2))) #the voltage drop across the first resistors is calculated.
+        voltages[voltage*(motorResistance/(motorResistance+cutSwitchResistance))] = p #Since the current is cut in half due to the cut switch in parallel, the "apparent" voltage to achieve the same current without the cut switch is half.
         
 #quadruple activation voltages
 if enableQuadrupleActivations:
-    for positions in combinations(range(7), 4):
-        print("hit")
+    for positions in combinations(range(6), 4):
         p = [0] * 7
-        R1list = []
-        R2list = []
+        Rlist = []
         for i in positions:
             p[i] = 1
-            R1list.append(ohmRatios[i,0])
-            R2list.append(ohmRatios[i,1])
-        R1 = (1/((1/R1list[0])+(1/R1list[1])+(1/R1list[2])+(1/R1list[3])))
-        R2 = (1/((1/R2list[0])+(1/R2list[1])+(1/R2list[2])+(1/R2list[3])))
-        voltage = (R2/(R1+R2))*inputVoltage
+            Rlist.append(potResistances[i])
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1])+(1/Rlist[2])+(1/Rlist[3])))
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+motorResistance)))
         voltages[voltage] = p
+        
+    for positions in combinations(range(6), 4):
+        p = [0] * 7
+        Rlist = []
+        for i in positions:
+            p[i] = 1
+            Rlist.append(potResistances[i])
+        p[6] = 1
+        R1 = (1/((1/Rlist[0])+(1/Rlist[1])+(1/Rlist[2])+(1/Rlist[3]))) #the resistance of all activated channels are added using the parallel resistance equation
+        R2 = (1/((1/motorResistance)+(1/cutSwitchResistance))) #the resistance of the motor and cutswitch in parallel is calculated
+        voltage = inputVoltage-(inputVoltage*(R1/(R1+R2))) #the voltage drop across the first resistors is calculated.
+        voltages[voltage*(motorResistance/(motorResistance+cutSwitchResistance))] = p #Since the current is cut in half due to the cut switch in parallel, the "apparent" voltage to achieve the same current without the cut switch is half.
+
+
+
+     
 voltagesSorted = OrderedDict(sorted(voltages.items(), key=lambda x:x[1], reverse=True))
 
 print("End Part 2")
@@ -196,16 +230,17 @@ print("End Part 2")
 speeds = {0.0: [0,0,0,0,0,0,0]}
 maximumSpeed = 1800 #maximum observed speed in RPM. This can include gear reduction
 minimumSpeed = None
-minimumVoltage = None #TODO: determine minimum opperational voltage
+minimumMotorVoltage = 3 #TODO: determine minimum opperational voltage
+maximumMotorVoltage = max(voltages, key=float)
 
 if not useDebugSpeedList:
     for key in voltages:
-        vRatio = float(key)/inputVoltage
+        vRatio = float(key)/maximumMotorVoltage
         rotationSpeed = ((vRatio*maximumSpeed)*(1/motorRotationsPerMM))/60 #mm/s
         speeds[rotationSpeed] = voltages[key]
     speedsSorted = OrderedDict(sorted(speeds.items(), key=lambda x:x[1], reverse=True))
 else:
-    for x in range(maximumItt):
+    for x in range(maximumItt): #use evenly spaced speeds for testing purposes
         rotationSpeed = maximumSurfaceSpeed*((x+1)/maximumItt)
         speeds[rotationSpeed] = [1]
     speedsSorted = OrderedDict(sorted(speeds.items(), key=lambda x:x[1], reverse=True))
@@ -610,5 +645,14 @@ xIncPlus100 = tk.Button(window, command=xPlus100, text="X +100")
 xIncPlus100.pack(side=tk.LEFT)
 xIncPlus10 = tk.Button(window, command=xPlus10, text="X +10")
 xIncPlus10.pack(side=tk.LEFT)
+
+import matplotlib.pylab as plt
+x = list()
+for key in speeds: x.append(key)
+plt.hist(x, bins=10)
+plt.title("Histogram of Speeds (%i total)" % len(speeds))
+plt.xlabel("Motor Speed (mm/s)")
+plt.ylabel("Frequency")
+plt.show()
 
 window.mainloop()
